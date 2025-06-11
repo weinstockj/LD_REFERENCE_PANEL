@@ -1,19 +1,30 @@
 import pandas as pd 
 import os
+import yaml
 
 ## CONFIG -----------------------------------------------------------------------------
-# one line per region
-LD_blocks_file = "/data/abattle4/april/hi_julia/LDblocks_GRCh38/data/pyrho_EUR_LD_blocks.bed"
+# Load configuration from config.yaml
+config = yaml.safe_load(open("config.yaml"))
 
-# No X chromsome!
-CHROMS, = glob_wildcards("../input/20201028_CCDG_14151_B01_GRM_WGS_2020-08-05_{ID}.recalibrated_variants.vcf.gz")
+# Extract configuration parameters
+LD_blocks_file = config["ld_blocks_file"]
+ped_file = config["ped_file"]
+POPULATIONS = config["populations"]
+output_bcf_dir = config["output_dir"]
 
-ped_file = "../input/20130606_g1k_3202_samples_ped_population.txt"
+# Extract VCF files using pattern from config
+vcf_pattern = os.path.join(config["input_dir"], config["vcf_pattern"])
+CHROMS, = glob_wildcards(vcf_pattern)
 
-# POPULATIONS = ["AFR", "AMR", "EAS", "EUR", "SAS"]
-POPULATIONS = ["EUR"] # only using EUR LD blocks for now
+# Quality control parameters
+MIN_MAF = config["min_maf"]
+MIN_MAC = config["min_mac"]
+MAX_MISSING = config["max_missing"]
 
-output_bcf_dir = "../output/bcf"
+# Environment paths
+CONDA = config["conda_path"]
+MAMBA = config["mamba_path"]
+BCFTOOLS_PLUGINS = config["bcftools_plugins"]
 
 # -------------------------------------------------------------------------------------
 if not os.path.isfile(LD_blocks_file):
@@ -25,7 +36,6 @@ print(LD_blocks.head())
 LD_blocks["block"] = LD_blocks["chr"].astype(str) + "_" + LD_blocks["start"].astype(str) + "_" + LD_blocks["end"].astype(str)
 
 LD_blocks["bcf"] = output_bcf_dir + "/" + LD_blocks["chr"].astype(str) + ".recalibrated_variants.bcf"
-
 
 
 rule all:
@@ -41,7 +51,7 @@ rule all:
 
 rule bcf:
     input:
-        vcf = "../input/20201028_CCDG_14151_B01_GRM_WGS_2020-08-05_{ID}.recalibrated_variants.vcf.gz"
+        vcf = os.path.join(config["input_dir"], config["vcf_pattern"])
     output:
         bcf = os.path.join(output_bcf_dir, "{ID}.recalibrated_variants.bcf")
     threads: 2 
@@ -52,7 +62,7 @@ rule bcf:
     shell:
         """
         module load bcftools
-        bcftools view -m2 -M2 -v snps -f PASS -i "MAC >= 5 && F_MISSING < 0.15" -O b {input.vcf} > {output.bcf}
+        bcftools view -m2 -M2 -v snps -f PASS -i "MAC >= {MIN_MAC} && F_MISSING < {MAX_MISSING}" -O b {input.vcf} > {output.bcf}
         bcftools index {output.bcf}
         """
 
@@ -113,8 +123,13 @@ rule filter_pop:
     shell:
         """
         mkdir -p $(dirname {output.bcf})
-        module load bcftools
-        bcftools view -r {params.CHROM}:{params.START}-{params.END} -S {input.samples} -O u {params.BCF} | bcftools annotate --set-id '%CHROM\_%POS\_%REF\_%FIRST_ALT' -O b > {output.bcf}
+
+        source {CONDA}
+        source {MAMBA}
+        mamba activate bcftools
+        export BCFTOOLS_PLUGINS={BCFTOOLS_PLUGINS}
+
+        bcftools view -r {params.CHROM}:{params.START}-{params.END} -S {input.samples} -O u {params.BCF} | bcftools +fill-tags -O u | bcftools view -i "MAF > {MIN_MAF}" -O u | bcftools annotate --set-id '%CHROM\_%POS\_%REF\_%FIRST_ALT' -O b > {output.bcf}
         bcftools index {output.bcf}
         """
         

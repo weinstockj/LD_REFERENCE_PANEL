@@ -1,0 +1,31 @@
+# LD Reference Panel Configuration Template
+# Copy this file to config.yaml and update paths for your system
+
+# Input files and directories
+input_dir: "../input"
+vcf_pattern: "path/to/20201028_CCDG_14151_B01_GRM_WGS_2020-08-05_{ID}.recalibrated_variants.vcf.gz"
+ld_blocks_file: "/path/to/ld_blocks.bed"
+ped_file: "../input/population_metadata.txt"
+
+# Output directory
+output_dir: "../output/bcf"
+
+# Populations to process
+populations:
+  - "EUR"  # only using EUR LD blocks for now
+# populations:
+#   - "AFR"
+#   - "AMR" 
+#   - "EAS"
+#   - "EUR"
+#   - "SAS"
+
+# Quality control parameters
+min_maf: 0.005          # Minimum minor allele frequency
+min_mac: 5              # Minimum minor allele count
+max_missing: 0.15       # Maximum missing data rate
+
+# Environment paths (update these for your system)
+conda_path: "/path/to/conda.sh"
+mamba_path: "/path/to/mamba.sh"
+bcftools_plugins: "/path/to/bcftools/plugins"
